@@ -1,0 +1,56 @@
+# === RTP GUI Plugin Configuration ===
+
+# GUI Settings
+gui:
+  title: "<gradient:green:yellow>Select a World to Teleport</gradient>"
+  size: 9
+  open-sound: "UI_BUTTON_CLICK"
+  click-sound: "BLOCK_NOTE_BLOCK_PLING"
+  items:
+    overworld:
+      slot: 2
+      material: GRASS_BLOCK
+      name: "<green>Overworld"
+      lore:
+        - "<gray>Click to teleport randomly in the Overworld!"
+    nether:
+      slot: 4
+      material: NETHERRACK
+      name: "<red>Nether"
+      lore:
+        - "<gray>Click to teleport randomly in the Nether!"
+    end:
+      slot: 6
+      material: END_STONE
+      name: "<yellow>The End"
+      lore:
+        - "<gray>Click to teleport randomly in the End!"
+
+# Cooldown in seconds
+cooldown: 300
+
+# Teleportation effects
+effects:
+  teleport-sound: "ENTITY_ENDERMAN_TELEPORT"
+  teleport-particle: "PORTAL"
+  particle-count: 40
+
+# Messages
+messages:
+  teleporting: "<green>Teleporting to a random location in <yellow>%world%</yellow>..."
+  cooldown: "<red>You must wait <yellow>%time%s</yellow> before using RTP again!"
+  countdown: "<yellow>Teleporting in %countdown%s..."
+  cancel-move: "<red>Teleport cancelled because you moved!"
+  cancel-damage: "<red>Teleport cancelled because you took damage!"
+
+# World names
+worldnames:
+  overworld: "world"
+  nether: "world_nether"
+  end: "world_the_end"
+
+teleport:
+  countdown: 5         # seconds before teleport happens
+  move-cancel: true    # cancel teleport if player moves
+  damage-cancel: true  # cancel teleport if player takes damage
+  countdown-sound: "UI_BUTTON_CLICK"
