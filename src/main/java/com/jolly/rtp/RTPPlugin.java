@@ -4,6 +4,11 @@ import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.WorldCreator;
+import org.bukkit.WorldType;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -11,20 +16,18 @@ import org.bukkit.plugin.java.JavaPlugin;
 public class RTPPlugin extends JavaPlugin {
     private static RTPPlugin instance;
     private final MiniMessage mm = MiniMessage.miniMessage();
-
+    private final FileConfiguration config = getConfig();
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
-
         getServer().getPluginManager().registerEvents(new RTPListener(this), this);
 
         // ✅ Register /rtp command using the new Paper API
         registerRTPCommand();
-
+        registerReloadCommand();
         getLogger().info("RTPGUI enabled successfully on Paper/Folia!");
     }
-
 
     private void registerRTPCommand() {
         this.registerCommand("rtp", new BasicCommand() {
@@ -34,8 +37,30 @@ public class RTPPlugin extends JavaPlugin {
                     stack.getSender().sendMessage("This command can only be used by players!");
                     return;
                 }
-
+                if (!player.hasPermission("rtp.use")) {
+                    player.sendActionBar(mm.deserialize(config.getString("no-permission", "<red>You have no permission to use /rtp!")));
+                    return;
+                }
                 RTPListener.openGUI(player);
+            }
+        });
+    }
+
+    private void registerReloadCommand() {
+        this.registerCommand("rtpreload", new BasicCommand() {
+            @Override
+            public void execute(CommandSourceStack stack, String[] args) {
+                if ((stack.getSender() instanceof Player player)) {
+                    if (!player.hasPermission("rtp.reload")) {
+                        player.sendActionBar(mm.deserialize(config.getString("no-permission", "<red>You have no permission to reload!")));
+                        return;
+                    } else {
+                        player.sendActionBar(mm.deserialize("<green>Successfully reloaded RTP!"));
+                    }
+                reloadConfig();
+                getLogger().info("Reloading RTP config...");
+                getLogger().info("Successfully reloaded RTP config!");
+                }
             }
         });
     }
@@ -58,5 +83,4 @@ public class RTPPlugin extends JavaPlugin {
         }
         return text;
     }
-
 }

@@ -1,7 +1,15 @@
 name: RTPGUI
 main: com.jolly.rtp.RTPPlugin
-version: 1.2.0
+version: 1.4
 api-version: 1.21
 folia-supported: true
 softdepend: [PlaceholderAPI]
-
+permissions:
+  rtp.cooldown:
+    description: Base permission for RTP cooldowns.
+  rtp.reload:
+    description: Reload RTP Plugin
+    default: op
+  rtp.use:
+    description: Use /rtp command
+    default: true

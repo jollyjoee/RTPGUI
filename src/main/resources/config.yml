@@ -1,33 +1,56 @@
 # === RTP GUI Plugin Configuration ===
+# CUSTOM WORLDS ARE NOT SUPPORTED!!!
 
 # GUI Settings
 gui:
   title: "<gradient:green:yellow>Select a World to Teleport</gradient>"
-  size: 9
+  size: 9 #9 per row. 2 rows = 18, 3 rows = 27, and so on
   open-sound: "UI_BUTTON_CLICK"
   click-sound: "BLOCK_NOTE_BLOCK_PLING"
+  disabled-sound: "ENTITY_VILLAGER_NO"
   items:
     overworld:
+      world-name: "world"
+      enabled: true
       slot: 2
       material: GRASS_BLOCK
       name: "<green>Overworld"
       lore:
         - "<gray>Click to teleport randomly in the Overworld!"
     nether:
+      world-name: "world_nether"
+      enabled: false
       slot: 4
       material: NETHERRACK
       name: "<red>Nether"
       lore:
         - "<gray>Click to teleport randomly in the Nether!"
     end:
+      world-name: "world_the_end"
+      enabled: false
       slot: 6
       material: END_STONE
       name: "<yellow>The End"
       lore:
         - "<gray>Click to teleport randomly in the End!"
 
-# Cooldown in seconds
-cooldown: 300
+cooldown:
+  default:
+    cooldown: 180
+    #This is the default cooldown if players don't
+    #have any rtp.cooldown.<rankname> permissions.
+  rank1:
+    permission: "rank1" #rtp.cooldown.rank1
+    cooldown: 120
+  rank2:
+    permission: "rank2" #rtp.cooldown.rank2
+    cooldown: 60
+
+teleport:
+  countdown: 5         # seconds before teleport happens
+  move-cancel: true    # cancel teleport if player moves
+  damage-cancel: true  # cancel teleport if player takes damage
+  countdown-sound: "UI_BUTTON_CLICK"
 
 # Teleportation effects
 effects:
@@ -42,15 +65,4 @@ messages:
   countdown: "<yellow>Teleporting in %countdown%s..."
   cancel-move: "<red>Teleport cancelled because you moved!"
   cancel-damage: "<red>Teleport cancelled because you took damage!"
-
-# World names
-worldnames:
-  overworld: "world"
-  nether: "world_nether"
-  end: "world_the_end"
-
-teleport:
-  countdown: 5         # seconds before teleport happens
-  move-cancel: true    # cancel teleport if player moves
-  damage-cancel: true  # cancel teleport if player takes damage
-  countdown-sound: "UI_BUTTON_CLICK"
+  no-permission: "<red>You have no permission to use /rtp reload!"

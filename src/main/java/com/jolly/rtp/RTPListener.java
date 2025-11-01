@@ -5,6 +5,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
@@ -35,15 +36,37 @@ public class RTPListener extends RTPPlugin implements Listener {
     public static boolean canUseRTP(Player p) {
         long now = System.currentTimeMillis();
         long last = cooldowns.getOrDefault(p.getUniqueId(), 0L);
-        long cooldown = RTPPlugin.getInstance().getConfig().getLong("cooldown", 300) * 1000;
+
+        long cooldown = getPlayerCooldown(p); // dynamic
         return (now - last) >= cooldown;
     }
+
 
     public static long getCooldownRemaining(Player p) {
         long now = System.currentTimeMillis();
         long last = cooldowns.getOrDefault(p.getUniqueId(), 0L);
-        long cooldown = RTPPlugin.getInstance().getConfig().getLong("cooldown", 300) * 1000;
+
+        long cooldown = getPlayerCooldown(p); // dynamic
         return Math.max(0, (cooldown - (now - last)) / 1000);
+    }
+
+    private static long getPlayerCooldown(Player p) {
+        int result = Integer.MAX_VALUE;
+        FileConfiguration cfg = RTPPlugin.getInstance().getConfig();
+        ConfigurationSection cooldownSection = cfg.getConfigurationSection("cooldown");
+        if (cooldownSection == null) return 180 * 1000; // fallback 3 min
+        for (String key : cooldownSection.getKeys(false)) {
+            String permission = cooldownSection.getConfigurationSection(key).getString("permission", "");
+            if (permission != null && !permission.isEmpty()) {
+                String permissionNode = "rtp.cooldown." + permission; // e.g., rtp.cooldown.rank1
+                if (p.isPermissionSet(permissionNode) && p.hasPermission(permissionNode)) {
+                    int seconds = cooldownSection.getConfigurationSection(key).getInt("cooldown", 180);
+                    result = Math.min(result, seconds);
+                }
+            }
+        }
+        int def = cooldownSection.getConfigurationSection("default").getInt("cooldown", 180);
+        return Math.min(result, def)  * 1000L;
     }
 
     public static void openGUI(Player p) {
@@ -51,7 +74,7 @@ public class RTPListener extends RTPPlugin implements Listener {
         ConfigurationSection gui = plugin.getConfig().getConfigurationSection("gui");
 
         int size = gui.getInt("size", 9);
-        String title = gui.getString("title", "<green>Select a World>");
+        String title = gui.getString("title", "<green>Select a World");
         Inventory inv = Bukkit.createInventory(null, size, plugin.mm().deserialize(title));
 
         ConfigurationSection items = gui.getConfigurationSection("items");
@@ -83,11 +106,14 @@ public class RTPListener extends RTPPlugin implements Listener {
         String guiTitle = plugin.getConfig().getString("gui.title");
         if (!e.getView().title().equals(plugin.mm().deserialize(guiTitle))) return;
         e.setResult(Event.Result.DENY);
-
+        String disabledSound = plugin.getConfig().getString("gui.disabled-sound", "ENTITY_VILLAGER_NO");
         if (!RTPListener.canUseRTP(p)) {
             long remaining = RTPListener.getCooldownRemaining(p);
             String msg = plugin.getConfig().getString("messages.cooldown", "<red>Wait %time%s.")
                     .replace("%time%", String.valueOf(remaining));
+            try {
+                p.playSound(p.getLocation(), Sound.valueOf(disabledSound), 1f, 1f);
+            } catch (IllegalArgumentException ignored) {}
             p.sendActionBar(mm().deserialize(parsePlaceholders(p, msg)));
             return;
         }
@@ -96,24 +122,41 @@ public class RTPListener extends RTPPlugin implements Listener {
         if (clicked == null || clicked.getType() == Material.AIR) return;
 
         String clickSound = plugin.getConfig().getString("gui.click-sound", "UI_BUTTON_CLICK");
-        try {
-            p.playSound(p.getLocation(), Sound.valueOf(clickSound), 1f, 1f);
-        } catch (IllegalArgumentException ignored) {}
 
-        String worldName = switch (clicked.getType()) {
-            case GRASS_BLOCK -> plugin.getConfig().getString("worldnames.overworld", "world");
-            case NETHERRACK -> plugin.getConfig().getString("worldnames.world_nether", "world_nether");
-            case END_STONE -> plugin.getConfig().getString("worldnames.world_the_end", "world_the_end");
-            default -> null;
-        };
+        ConfigurationSection items = plugin.getConfig().getConfigurationSection("gui.items");
+        if (items == null) return;
 
-        if (worldName == null) return;
-        World world = Bukkit.getWorld(worldName);
-        if (world == null) {
-            p.sendMessage(Component.text("§cWorld not found!"));
-            return;
+        String targetWorld = null;
+
+        for (String key : items.getKeys(false)) {
+            ConfigurationSection section = items.getConfigurationSection(key);
+            if (section == null) continue;
+
+            Material material = Material.matchMaterial(section.getString("material", ""));
+            if (material == null) continue;
+
+            if (clicked.getType() == material) {
+                if (!section.getBoolean("enabled", true)) {
+                    p.sendActionBar(mm().deserialize(section.getString("name", key) + " <red>is disabled!"));
+                    try {
+                        p.playSound(p.getLocation(), Sound.valueOf(disabledSound), 1f, 1f);
+                    } catch (IllegalArgumentException ignored) {}
+                    continue;
+                }
+                try {
+                    p.playSound(p.getLocation(), Sound.valueOf(clickSound), 1f, 1f);
+                } catch (IllegalArgumentException ignored) {}
+                targetWorld = section.getString("world-name");
+                break;
+            }
         }
 
+        if (targetWorld == null) return;
+        World world = Bukkit.getWorld(targetWorld);
+        if (world == null) {
+            p.sendActionBar(Component.text("§cWorld not found!"));
+            return;
+        }
         p.closeInventory();
         startTeleportCountdown(p, world);
     }
