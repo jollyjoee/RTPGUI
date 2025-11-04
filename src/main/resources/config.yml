@@ -60,9 +60,10 @@ effects:
 
 # Messages
 messages:
-  teleporting: "<green>Teleporting to a random location in <yellow>%world%</yellow>..."
+  teleported: "<green>Teleported to a random location in the %world%<green>!"
   cooldown: "<red>You must wait <yellow>%time%s</yellow> before using RTP again!"
   countdown: "<yellow>Teleporting in %countdown%s..."
   cancel-move: "<red>Teleport cancelled because you moved!"
   cancel-damage: "<red>Teleport cancelled because you took damage!"
   no-permission: "<red>You have no permission to use /rtp reload!"
+  scanning: "<aqua>Scanning for a safe teleport location. <gray>(Attempt#%attempt%)"

@@ -20,6 +20,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class RTPListener extends RTPPlugin implements Listener {
     private static final Map<UUID, Long> cooldowns = new ConcurrentHashMap<>();
@@ -28,7 +29,7 @@ public class RTPListener extends RTPPlugin implements Listener {
 
     private final RTPPlugin plugin;
     private final Random random = new Random();
-
+    private String displayName = null;
     public RTPListener(RTPPlugin plugin) {
         this.plugin = plugin;
     }
@@ -147,6 +148,7 @@ public class RTPListener extends RTPPlugin implements Listener {
                     p.playSound(p.getLocation(), Sound.valueOf(clickSound), 1f, 1f);
                 } catch (IllegalArgumentException ignored) {}
                 targetWorld = section.getString("world-name");
+                displayName = section.getString("name");
                 break;
             }
         }
@@ -164,33 +166,67 @@ public class RTPListener extends RTPPlugin implements Listener {
     // --- Countdown & cancel ---
     private void startTeleportCountdown(Player player, World world) {
         if (teleporting.contains(player.getUniqueId())) return;
-
+        AtomicReference<Location> loc = new AtomicReference<>();
         teleporting.add(player.getUniqueId());
         startLocations.put(player.getUniqueId(), player.getLocation().clone());
-
         AtomicInteger countdown = new AtomicInteger(plugin.getConfig().getInt("teleport.countdown", 5));
-        Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
-            if (!player.isOnline() || !teleporting.contains(player.getUniqueId())) {
-                task.cancel();
-                return;
-            }
+        WorldBorder border = world.getWorldBorder();
+        double radius = border.getSize() / 2;
+        double centerX = border.getCenter().getX();
+        double centerZ = border.getCenter().getZ();
+        int minY = world.getMinHeight();
+        AtomicInteger attempt = new AtomicInteger();
+        Runnable[] attemptRunner = new Runnable[1];
+        attemptRunner[0] = () -> {
+            int x = (int) (centerX + (random.nextDouble() * 2 - 1) * radius);
+            int z = (int) (centerZ + (random.nextDouble() * 2 - 1) * radius);
 
-            if (countdown.get() <= 0) {
-                task.cancel();
-                teleporting.remove(player.getUniqueId());
-                startLocations.remove(player.getUniqueId());
-                cooldowns.put(player.getUniqueId(), System.currentTimeMillis());
-                teleportPlayer(player, world);
-                return;
-            }
+            Bukkit.getRegionScheduler().run(plugin, world, x >> 4, z >> 4, regionTask -> {
+                if (!teleporting.contains(player.getUniqueId())) {
+                    regionTask.cancel();
+                    return;
+                }
+                attempt.getAndIncrement();
+                int y;
+                if (world.getEnvironment() == World.Environment.NETHER) {
+                    y = random.nextInt(33, 120);
+                } else {
+                    y = world.getHighestBlockYAt(x, z);
+                }
+                //plugin.getLogger().info("Scanning for a safe location in " + world.getName() + ". Environment = " + world.getEnvironment() + ". Currently at " + x + ", " + y + ", " + z);
+                player.sendActionBar(plugin.mm().deserialize(plugin.getConfig().getString("messages.scanning", "<aqua>Scanning for a safe teleport location. <gray>(Attempt#{attempt})")
+                        .replace("%attempt%", String.valueOf(attempt))));
+                loc.set(new Location(world, x + 0.5, y + 1, z + 0.5));
+                world.loadChunk(loc.get().getChunk().getX(), loc.get().getChunk().getZ(), true);
+                if (!border.isInside(loc.get()) || loc.get().getBlockY() < minY || !isSafeLocation(loc.get(), getUnsafeBlocks())) {
+                    attemptRunner[0].run();
+                    return;
+                }
+                Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, task -> {
+                    if (!player.isOnline() || !teleporting.contains(player.getUniqueId())) {
+                        task.cancel();
+                        return;
+                    }
 
-            String msg = plugin.getConfig().getString("messages.countdown", "<yellow>Teleporting in %countdown%s...")
-                    .replace("%countdown%", String.valueOf(countdown.get()));
-            player.sendActionBar(mm().deserialize(parsePlaceholders(player, msg)));
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1.2f);
+                    if (countdown.get() <= 0) {
+                        task.cancel();
+                        teleporting.remove(player.getUniqueId());
+                        startLocations.remove(player.getUniqueId());
+                        cooldowns.put(player.getUniqueId(), System.currentTimeMillis());
+                        teleportPlayer(player, loc.get());
+                        return;
+                    }
 
-            countdown.getAndDecrement();
-        }, 1L, 20L);
+                    String msg = plugin.getConfig().getString("messages.countdown", "<yellow>Teleporting in %countdown%s...")
+                            .replace("%countdown%", String.valueOf(countdown.get()));
+                    player.sendActionBar(mm().deserialize(parsePlaceholders(player, msg)));
+                    player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1.2f);
+
+                    countdown.getAndDecrement();
+                }, 1L, 20L);
+            });
+        };
+        attemptRunner[0].run();
     }
 
     @EventHandler
@@ -223,58 +259,39 @@ public class RTPListener extends RTPPlugin implements Listener {
     }
 
     // --- Folia-safe teleport ---
-    public void teleportPlayer(Player player, World world) {
+    public void teleportPlayer(Player player, Location loc) {
         RegionScheduler regionScheduler = Bukkit.getRegionScheduler();
-        WorldBorder border = world.getWorldBorder();
-        double radius = border.getSize() / 2;
-        double centerX = border.getCenter().getX();
-        double centerZ = border.getCenter().getZ();
-        int minY = world.getMinHeight();
-
+        loc.add(0, 1, 0);
         Runnable[] attemptRunner = new Runnable[1];
         attemptRunner[0] = () -> {
-            int x = (int) (centerX + (random.nextDouble() * 2 - 1) * radius);
-            int z = (int) (centerZ + (random.nextDouble() * 2 - 1) * radius);
-
-            regionScheduler.run(plugin, world, x >> 4, z >> 4, regionTask -> {
-                int y = world.getHighestBlockYAt(x, z);
-                Location loc = new Location(world, x + 0.5, y + 1, z + 0.5);
-
-                if (!border.isInside(loc) || loc.getBlockY() < minY || !isSafeLocation(loc, getUnsafeBlocks())) {
-                    attemptRunner[0].run();
-                    return;
-                }
-
-                regionScheduler.run(plugin, player.getLocation(), playerRegionTask -> {
+            regionScheduler.run(plugin, player.getLocation(), playerRegionTask -> {
                     player.teleportAsync(loc).thenRun(() -> {
-                        String msg = plugin.getConfig().getString("messages.teleporting", "<green>Teleported!");
-                        msg = msg.replace("%world%", world.getName());
+                        String msg = plugin.getConfig().getString("messages.teleported", "<green>Teleported to a random location in the %world%<green>!");
+                        msg = msg.replace("%world%", displayName);
                         player.sendActionBar(plugin.mm().deserialize(plugin.parsePlaceholders(player, msg)));
-
                         String soundStr = plugin.getConfig().getString("effects.teleport-sound", "ENTITY_ENDERMAN_TELEPORT");
                         try {
                             player.playSound(loc, Sound.valueOf(soundStr), 1f, 1f);
                         } catch (IllegalArgumentException ignored) {}
-
                         try {
                             Particle particle = Particle.valueOf(plugin.getConfig().getString("effects.teleport-particle", "PORTAL"));
                             int count = plugin.getConfig().getInt("effects.particle-count", 40);
-                            world.spawnParticle(particle, loc.clone().add(0, 1, 0), count, 0.5, 1, 0.5, 0.1);
+                            player.getWorld().spawnParticle(particle, loc.clone().add(0, 1, 0), count, 0.5, 1, 0.5, 0.1);
                         } catch (Exception ignored) {}
                     }).exceptionally(ex -> {
                         player.sendMessage(Component.text("§cTeleport failed."));
                         return null;
                     });
                 });
-            });
-        };
+            };
         attemptRunner[0].run();
-    }
+        }
 
     private boolean isSafeLocation(Location loc, Set<Material> unsafe) {
         Block block = loc.getBlock();
         Block below = block.getRelative(0, -1, 0);
-        return !below.isEmpty() && !unsafe.contains(below.getType()) && !unsafe.contains(block.getType()) && loc.getY() > 5;
+        Block head = block.getRelative(0, +1, 0);
+        return !below.isEmpty() && !unsafe.contains(below.getType()) && !unsafe.contains(block.getType()) && !unsafe.contains(head.getType()) && !head.isSolid() && loc.getY() > 5;
     }
 
     private Set<Material> getUnsafeBlocks() {

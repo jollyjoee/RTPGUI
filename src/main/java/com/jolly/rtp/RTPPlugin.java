@@ -4,10 +4,6 @@ import io.papermc.paper.command.brigadier.BasicCommand;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.World;
-import org.bukkit.WorldCreator;
-import org.bukkit.WorldType;
-import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -22,8 +18,7 @@ public class RTPPlugin extends JavaPlugin {
         instance = this;
         saveDefaultConfig();
         getServer().getPluginManager().registerEvents(new RTPListener(this), this);
-
-        // ✅ Register /rtp command using the new Paper API
+        Metrics metrics = new Metrics(this, 27848);
         registerRTPCommand();
         registerReloadCommand();
         getLogger().info("RTPGUI enabled successfully on Paper/Folia!");
